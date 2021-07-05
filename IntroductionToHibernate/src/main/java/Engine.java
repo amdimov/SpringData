@@ -1,11 +1,12 @@
-import antlr.StringUtils;
-import entities.Address;
-import entities.Employee;
-import entities.Project;
-import entities.Town;
+import entities.*;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
+import javax.persistence.TypedQuery;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Join;
+import javax.persistence.criteria.Root;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -14,7 +15,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 
 public class Engine implements Runnable{
     private final BufferedReader reader;
@@ -39,6 +41,8 @@ public class Engine implements Runnable{
                 case 8 -> exerciseEight();
                 case 9 -> exerciseNine();
                 case 10 -> exerciseTen();
+                case 11 -> exerciseEleven();
+                case 12 -> exerciseTwelve();
             }
 
         } catch (IOException e) {
@@ -142,14 +146,49 @@ public class Engine implements Runnable{
                                         e.getEndDate() != null ? e.getEndDate().format(formatter) : null)
                         );
     }
-    private void exerciseTen(){
-        entityManager.createQuery("SELECT e FROM Employee e WHERE e.department.name IN(:eng, :td, :mark, :is)", Employee.class)
+
+    private void exerciseTen() {
+        entityManager.getTransaction().begin();
+        entityManager.createQuery("UPDATE Employee e SET e.salary = (e.salary * 1.12) " +
+                "WHERE e.department.id IN :ids")
+                .setParameter("ids", Set.of(1, 2, 4, 11))
+                .executeUpdate();
+        entityManager.getTransaction().commit();
+
+        entityManager.createQuery("SELECT e FROM Employee e " +
+                "WHERE e.department.name IN(:eng, :td, :mark, :is)", Employee.class)
                 .setParameter("eng", "Engineering")
                 .setParameter("td", "Tool Design")
                 .setParameter("mark", "Marketing")
                 .setParameter("is", "Information Services")
                 .getResultStream()
-                .forEach(e -> System.out.printf("%s %s (%.2f)%n", e.getFirstName(), e.getLastName(), e.getSalary()));
-            }
+                .forEach(e -> System.out.printf("%s %s ($%.2f)%n", e.getFirstName(), e.getLastName(), e.getSalary()));
+    }
+    private void exerciseEleven() throws IOException {
+        System.out.print("Please type the starting pattern of employee's first name: ");
+        String pattern = reader.readLine();
+        entityManager.createQuery("SELECT e FROM Employee e " +
+                "WHERE e.firstName LIKE CONCAT(:pattern, '%')", Employee.class)
+                .setParameter("pattern", pattern)
+                .getResultStream()
+                .forEach(e -> System.out.printf("%s %s - %s - ($%.2f)%n", e.getFirstName(),
+                        e.getLastName(), e.getJobTitle(), e.getSalary()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void exerciseTwelve(){
+        List<Object[]> resultList = entityManager.createNativeQuery(
+                "SELECT d.`name`, MAX(e.salary) AS e_salary " +
+                        "FROM departments d " +
+                        "JOIN employees e ON d.department_id = e.department_id " +
+                        "GROUP BY d.`name` " +
+                        "HAVING `e_salary` NOT BETWEEN 30000 AND 70000;"
+        ).getResultList();
+        for (Object[] objects : resultList) {
+            IntStream.range(0, objects.length).findFirst()
+                    .ifPresent(j -> System.out.println(objects[j] + " " + objects[j + 1]));
+        }
+    }
+
 }
 
